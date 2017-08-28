@@ -118,14 +118,18 @@ class Moderation:
 
 
     @commands.command(aliases=['c'], pass_context=True)
-    async def clean(self, ctx, msgs: int = 100):
+    async def clean(self, ctx, msgs: int = 1):
         '''Shortcut to clean all your messages.'''
         await self.bot.delete_message(ctx.message)
+        n = 0
         if msgs < 10000:
-            async for message in self.bot.logs_from(ctx.message.channel, limit=msgs):
-                try:
+            async for message in self.bot.logs_from(ctx.message.channel, limit=2*msgs+10): #if you want to delete 10 msgs, the
+                try:                                                         #last 10 msgs are probably not all yours
+                    if n>=msgs:
+                        return #stop deleting when desired msgs are deleted
                     if message.author == self.bot.user:
                         await self.bot.delete_message(message)
+                        n++
                 except:
                     pass
         else:
