@@ -661,6 +661,232 @@ class Utility:
         emb = discord.Embed(color=discord.Color.gold(), title="You Flipped A...", description = coin)
         await self.bot.say('', embed = emb)
         
+        
+        
+        
+    @commands.command(pass_context=True, aliases=['googlecalc', 'gcal', 'calc'])
+    async def gcalc(self, ctx,*, query):
+        """Searches google and gives you top result."""
+        await self.bot.type()
+        try:
+            card, entries = await self.get_google_entries(query)
+        except RuntimeError as e:
+            await self.bot.say(str(e))
+        else:
+            if card:
+                value = '\n'.join(entries[:3])
+                if value:
+                    if card.title != 'Calculator':
+                        card.add_field(name='Search Results', value=value, inline=False)
+                await self.bot.say(embed=card)
+                asyncio.sleep(2)
+                await self.bot.delete_message(ctx.message)
+                return 
+        await self.bot.say("Error: could not calculate expression")
+        await asyncio.sleep(2)
+        messages = []
+        async for m in self.bot.logs_from(ctx.message.channel, limit=2):
+            if m.author.id == ctx.message.author.id:
+                message = m
+                break
+        await self.bot.delete_message(ctx.message)
+        await self.bot.delete_message(message)
+
+        return
+
+
+
+    @commands.command(pass_context=True)
+    async def edit(self, ctx, *msg):
+        '''edit your previous message 
+        works up to 20 messages ago'''
+        msg = list(msg)
+        msg = ' '.join(msg)
+        channel = ctx.message.channel
+        # use the 2nd last message because the last message would be the command
+        messages = []
+        async for m in self.bot.logs_from(channel, limit=20):
+            messages.append(m)
+        for  m in messages[1:]:
+            if m.author.id == ctx.message.author.id:
+                message = m
+                break
+        if msg == None:
+            msg = message.content
+        print('{}')
+        msg = msg.replace('{}', message.content)
+        await self.bot.delete_message(ctx.message)
+        await self.bot.edit_message(message, new_content=msg)
+
+    @commands.command(pass_context=True)
+    async def replace(self, ctx, old, *newphrase):
+        '''replace one phrase to another in your previous message 
+        works up to 20 messages ago'''
+        new = list(newphrase)
+        new = ' '.join(new)
+        channel = ctx.message.channel
+        # use the 2nd last message because the last message would be the command
+        messages = []
+        async for m in self.bot.logs_from(channel, limit=20):
+            messages.append(m)
+        for  m in messages[1:]:
+            if m.author.id == ctx.message.author.id :
+                message = m
+                break
+        msg =  message.content.replace(old, new)
+        await self.bot.delete_message(ctx.message)
+        await self.bot.edit_message(message, new_content=msg)
+
+    @commands.command(pass_context=True)
+    async def reverse(self, ctx):
+        '''reverse your previous message 
+        works up to 20 messages ago'''
+        channel = ctx.message.channel
+        # use the 2nd last message because the last message would be the command
+        messages = []
+        async for m in self.bot.logs_from(channel, limit=20):
+            messages.append(m)
+        for  m in messages[1:]:
+            if m.author.id == '222925389641547776':
+                message = m
+                break
+
+        await self.bot.delete_message(ctx.message)
+        await self.bot.edit_message(message, new_content=message.content[::-1])
+
+    @commands.command(pass_context=True)
+    async def merge(self, ctx, msgs:int, join_with='\n'):
+        if msgs>10:
+            msgs = 10
+        elif msgs < 2:
+            msg  = await self.bot.say('can only merge 2 or more messages')
+            await asyncio.sleep(2)
+            await self.bot.delete_message(msg)
+            return
+        channel = ctx.message.channel
+        messages = []
+        await self.bot.delete_message(ctx.message)
+        n = 0
+        async for m in self.bot.logs_from(channel, limit=2*msgs+50):
+            if n < msgs:
+                pass
+            else:
+                break
+            if m.author.id == ctx.message.author.id:
+                messages.append(m)
+                n += 1
+
+        pastmsgs = []
+        for m in list(reversed(messages)):
+            pastmsgs.append(m.content)
+        newmsg = join_with.join(pastmsgs)
+        for m in messages[1:]:
+            await self.bot.delete_message(m)
+        await self.bot.edit_message(messages[0], new_content=newmsg)
+
+    def cleanup_code( content):
+        """Automatically removes code blocks from the code."""
+        # remove ```py\n```
+        if content.startswith('```') and content.endswith('```'):
+            return '\n'.join(content.split('\n')[1:-1])
+
+        # remove `foo`
+        return content.strip('` \n')
+
+    def get_syntax_error(e):
+        if e.text is None:
+            return '```py\n{0.__class__.__name__}: {0}\n```'.format(e)
+        return '```py\n{0.text}{1:>{0.offset}}\n{2}: {0}```'.format(e, '^', type(e).__name__)
+
+    async def to_code_block(ctx, body):
+        if body.startswith('```') and body.endswith('```'):
+            content = '\n'.join(body.split('\n')[1:-1])
+        else:
+            content = body.strip('`')
+        await bot.edit_message(ctx.message, '```py\n'+content+'```')
+
+    @commands.command(pass_context=True)
+    async def findcmd(self, ctx, command):
+        cog = ''
+        for cogclass in self.bot.cogs:
+            for cmd  in dir(self.bot.cogs[cogclass]):
+                if cmd.lower() == command.lower():
+                    for cog in self.bot.extensions:
+                        if cogclass in dir(self.bot.extensions[cog]):
+                            break
+                    await self.bot.say("Command `{}` is in class `{}` in cog `{}`".format(command, cogclass, cog))
+                    return
+        await self.bot.say("Couldn't find command `{}`".format(command))
+
+
+    @commands.command(pass_context=True, aliases=['d'])
+    async def debug(self, ctx, *, code):
+        """Evaluates code"""
+        def check(m):
+            if m.content.strip().lower() == "more":
+                return True
+
+        author = ctx.message.author
+        channel = ctx.message.channel
+
+        code = code.strip('` ')
+        result = None
+
+        global_vars = globals().copy()
+        global_vars['bot'] = self.bot
+        global_vars['ctx'] = ctx
+        global_vars['message'] = ctx.message
+        global_vars['author'] = ctx.message.author
+        global_vars['channel'] = ctx.message.channel
+        global_vars['server'] = ctx.message.server
+
+        try:
+            result = eval(code, global_vars, locals())
+        except Exception as e:
+            await self.bot.say(box('{}: {}'.format(type(e).__name__, str(e)),
+                                   lang="py"))
+            return
+
+        if asyncio.iscoroutine(result):
+            result = await result
+
+        result = str(result)
+
+        # if not ctx.message.channel.is_private:
+            # censor = (self.bot.settings.email,
+            #           self.bot.settings.password,
+            #           self.bot.settings.token)
+            # r = "[EXPUNGED]"
+            # for w in censor:
+            #     if w is None or w == "":
+            #         continue
+            #     result = result.replace(w, r)
+            #     result = result.replace(w.lower(), r)
+            #     result = result.replace(w.upper(), r)
+
+        result = list(pagify(result, shorten_by=16))
+
+        for i, page in enumerate(result):
+            if i != 0 and i % 4 == 0:
+                last = await self.bot.say("There are still {} messages. "
+                                          "Type `more` to continue."
+                                          "".format(len(result) - (i+1)))
+                msg = await self.bot.wait_for_message(author=author,
+                                                      channel=channel,
+                                                      check=check,
+                                                      timeout=10)
+                if msg is None:
+                    try:
+                        await self.bot.delete_message(last)
+                    except:
+                        pass
+                    finally:
+                        break
+            await self.bot.say(box(page, lang="py"))
+
+            
+            
+            
 
 def setup(bot):
     bot.add_cog(Utility(bot))
